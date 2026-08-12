@@ -1,0 +1,9 @@
+{
+  "name": "fabrica-de-aplicativos",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo da Fábrica de Aplicativos (AutomaçãoJS). Cada app comercial = uma pasta em apps/.",
+  "workspaces": [
+    "apps/*"
+  ]
+}
