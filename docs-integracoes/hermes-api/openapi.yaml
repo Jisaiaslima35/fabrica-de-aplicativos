@@ -1,0 +1,157 @@
+openapi: 3.0.0
+info:
+  title: Hermes API - 21 Dias de Gratidão
+  description: |
+    API para o app PWA "21 Dias de Gratidão" conversar com o Professor IA
+    (Hermes Agent com perfil "fabrica").
+
+    Documentação completa: https://github.com/Jisaiaslima35/fabrica-de-aplicativos/tree/main/docs-integracoes/hermes-api
+  version: 1.0.0
+  contact:
+    name: Isaías Silva
+    email: operajose343@gmail.com
+
+servers:
+  - url: https://preview.automacaojs.us/21-dias-gratidao/api
+    description: Produção (temporário)
+  - url: https://gratidao.automacaojs.us/api
+    description: Produção (futuro - ainda não existe)
+
+tags:
+  - name: Health
+    description: Sanity checks
+  - name: Content
+    description: Conteúdo do livro
+  - name: Chat
+    description: Chat com Professor IA
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Verifica se a API está online.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  service:
+                    type: string
+                    example: gratidao-rag
+
+  /content/{day}:
+    get:
+      tags: [Content]
+      summary: Texto do livro para um dia
+      parameters:
+        - name: day
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 21
+      responses:
+        '200':
+          description: Conteúdo encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  day:
+                    type: integer
+                  content:
+                    type: string
+                    description: Texto bruto do PDF (espanhol)
+                  pages:
+                    type: array
+                    items:
+                      type: integer
+                    description: Índices 0-based das páginas
+        '400':
+          description: Day inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /chat:
+    post:
+      tags: [Chat]
+      summary: Perguntar ao Professor IA
+      description: |
+        Endpoint SÍNCRONO. A resposta demora ~6-15s (LLM + RAG).
+        Timeout recomendado: 60s.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question:
+                  type: string
+                  description: Pergunta do usuário
+                day:
+                  type: integer
+                  minimum: 1
+                  maximum: 21
+                  description: Dia atual do programa
+                day_title:
+                  type: string
+                  description: Título do dia
+                day_content:
+                  type: string
+                  description: 'Texto bruto do livro (opcional, backend busca se vazio)'
+      responses:
+        '200':
+          description: Resposta do Professor IA
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer:
+                    type: string
+                    description: Resposta em PT-BR
+                  pages:
+                    type: array
+                    items:
+                      type: integer
+                  chunks_count:
+                    type: integer
+        '400':
+          description: Payload inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno (RAG/LLM)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: LLM gateway erro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

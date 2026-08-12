@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Hermes API - Exemplo Vanilla HTML</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    .chat { border: 1px solid #ccc; padding: 1rem; border-radius: 8px; min-height: 200px; margin-bottom: 1rem; }
+    .msg { margin: 0.5rem 0; padding: 0.5rem; border-radius: 4px; }
+    .user { background: #e3f2fd; }
+    .assistant { background: #f5f5f5; }
+    .pages { font-size: 0.8rem; color: #666; margin-top: 0.25rem; }
+    input { width: 80%; padding: 0.5rem; }
+    button { padding: 0.5rem 1rem; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:disabled { background: #999; }
+  </style>
+</head>
+<body>
+  <h1>🤖 Professor IA - 21 Dias de Gratidão</h1>
+
+  <div class="chat" id="chat"></div>
+
+  <input type="text" id="input" placeholder="Sua pergunta..." />
+  <button id="send">Enviar</button>
+
+  <script>
+    const API_BASE = 'https://preview.automacaojs.us/21-dias-gratidao/api'
+    const chat = document.getElementById('chat')
+    const input = document.getElementById('input')
+    const sendBtn = document.getElementById('send')
+
+    function addMessage(role, content, pages) {
+      const div = document.createElement('div')
+      div.className = 'msg ' + role
+      div.textContent = content
+      if (pages && pages.length > 0) {
+        const p = document.createElement('div')
+        p.className = 'pages'
+        p.textContent = '📖 Páginas: ' + pages.join(', ')
+        div.appendChild(p)
+      }
+      chat.appendChild(div)
+      chat.scrollTop = chat.scrollHeight
+    }
+
+    async function askProfessor(question, day, dayTitle) {
+      sendBtn.disabled = true
+      addMessage('user', question)
+      addMessage('assistant', 'Tô pensando aqui... 🙏')
+
+      try {
+        const r = await fetch(`${API_BASE}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, day, day_title: dayTitle }),
+        })
+
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+
+        const data = await r.json()
+        // Remove última msg (loading) e adiciona resposta
+        chat.removeChild(chat.lastChild)
+        addMessage('assistant', data.answer, data.pages)
+      } catch (e) {
+        chat.removeChild(chat.lastChild)
+        addMessage('assistant', '🤖 Tô com uma dificuldade técnica. Já volto! 🙏')
+      } finally {
+        sendBtn.disabled = false
+      }
+    }
+
+    sendBtn.addEventListener('click', () => {
+      const text = input.value.trim()
+      if (!text) return
+      input.value = ''
+      askProfessor(text, 5, 'Primeiro anjo da guarda')
+    })
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendBtn.click()
+    })
+  </script>
+</body>
+</html>

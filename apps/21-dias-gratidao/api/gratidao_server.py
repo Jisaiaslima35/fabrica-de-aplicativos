@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from functools import lru_cache
 import threading
 
@@ -39,7 +40,33 @@ if not KEY:
     sys.exit('API_SERVER_KEY ausente')
 
 BOOK_SLUG = '21-dias-gratidao'
+APP_SLUG = BOOK_SLUG
 PDF_PATH = Path(__file__).parent.parent / 'source.pdf'
+
+# ====== VAPID (Web Push) ======
+VAPID_PRIVATE_PATH = Path('/root/.hermes/secrets/vapid_private.pem')
+VAPID_SUBJECT = 'mailto:operajose343@gmail.com'
+_VAPID_INSTANCE = None
+if VAPID_PRIVATE_PATH.exists():
+    try:
+        from py_vapid import Vapid
+        _VAPID_INSTANCE = Vapid.from_pem(VAPID_PRIVATE_PATH.read_bytes())
+        log.info('VAPID key carregada (via from_pem)')
+    except Exception as e:
+        log.warning(f'VAPID load falhou: {e}')
+else:
+    log.warning('VAPID key NÃO encontrada — push desativado')
+
+def _vapid():
+    """Retorna instância Vapid carregada."""
+    global _VAPID_INSTANCE
+    if _VAPID_INSTANCE is None and VAPID_PRIVATE_PATH.exists():
+        try:
+            from py_vapid import Vapid
+            _VAPID_INSTANCE = Vapid.from_pem(VAPID_PRIVATE_PATH.read_bytes())
+        except Exception as e:
+            log.error(f'VAPID reload falhou: {e}')
+    return _VAPID_INSTANCE
 
 # ====== PERSONA PROFESSOR IA ======
 PROFESSOR_PROMPT = '''Você é o Professor IA do app "21 Dias de Gratidão" — um professor paciente, didático, acolhedor e profundamente humano.
@@ -119,6 +146,121 @@ def get_day_content(day: int) -> str:
         parts.append(doc[p].get_text())
     return '\n\n---\n\n'.join(parts).strip()
 
+# ====== Web Push (VAPID) ======
+def push_send(subscription: dict, payload: dict) -> tuple[bool, int, str]:
+    """Envia Web Push via pywebpush. Retorna (sucesso, status, erro)."""
+    vapid = _vapid()
+    if vapid is None:
+        return False, 0, 'VAPID não configurado'
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return False, 0, 'pywebpush não instalado'
+    try:
+        webpush(
+            subscription_info={
+                'endpoint': subscription['endpoint'],
+                'keys': {'p256dh': subscription['p256dh'], 'auth': subscription['auth']},
+            },
+            data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+            vapid_private_key=vapid,
+            vapid_claims={'sub': VAPID_SUBJECT},
+            ttl=60 * 60 * 24,
+        )
+        return True, 201, ''
+    except Exception as e:
+        try:
+            from pywebpush import WebPushException
+            if isinstance(e, WebPushException):
+                status = e.response.status_code if e.response else 0
+                if status in (404, 410):
+                    push_deactivate(subscription['endpoint'])
+                return False, status, str(e)
+        except Exception:
+            pass
+        return False, 0, str(e)
+
+def push_save(app_slug: str, device_id: str, sub: dict, ua: str, locale: str) -> bool:
+    body = [{
+        'app_slug': app_slug,
+        'device_id': device_id,
+        'endpoint': sub['endpoint'],
+        'p256dh': sub['keys']['p256dh'],
+        'auth': sub['keys']['auth'],
+        'user_agent': ua[:500] if ua else None,
+        'locale': locale,
+        'is_active': True,
+    }]
+    data = json.dumps(body).encode('utf-8')
+    req = Request(
+        f'{SUPABASE_URL}/rest/v1/push_subscriptions?on_conflict=endpoint',
+        data=data,
+        headers={
+            'apikey': SR, 'Authorization': f'Bearer {SR}',
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates,return=minimal',
+        },
+        method='POST',
+    )
+    try:
+        urlopen(req, timeout=10).read()
+        return True
+    except Exception as e:
+        log.error(f'push_save error: {e}')
+        return False
+
+def push_deactivate(endpoint: str):
+    data = json.dumps({'is_active': False}).encode('utf-8')
+    req = Request(
+        f'{SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.{quote(endpoint, safe="")}',
+        data=data,
+        headers={
+            'apikey': SR, 'Authorization': f'Bearer {SR}',
+            'Content-Type': 'application/json',
+        },
+        method='PATCH',
+    )
+    try:
+        urlopen(req, timeout=10).read()
+    except Exception as e:
+        log.warning(f'push_deactivate: {e}')
+
+def push_list_active(app_slug: str) -> list:
+    req = Request(
+        f'{SUPABASE_URL}/rest/v1/push_subscriptions?app_slug=eq.{app_slug}&is_active=eq.true&select=id,device_id,endpoint,p256dh,auth',
+        headers={'apikey': SR, 'Authorization': f'Bearer {SR}'},
+    )
+    try:
+        return json.loads(urlopen(req, timeout=10).read())
+    except Exception as e:
+        log.error(f'push_list: {e}')
+        return []
+
+def push_log(app_slug: str, sub_id: int, title: str, body: str, url: str, status: int, success: bool, error: str):
+    data = json.dumps([{
+        'app_slug': app_slug,
+        'subscription_id': sub_id,
+        'title': title[:200],
+        'body': body[:500],
+        'url': url[:300],
+        'status_code': status,
+        'success': success,
+        'error': error[:500] if error else None,
+    }]).encode('utf-8')
+    req = Request(
+        f'{SUPABASE_URL}/rest/v1/push_send_log',
+        data=data,
+        headers={
+            'apikey': SR, 'Authorization': f'Bearer {SR}',
+            'Content-Type': 'application/json', 'Prefer': 'return=minimal',
+        },
+        method='POST',
+    )
+    try:
+        urlopen(req, timeout=10).read()
+    except Exception as e:
+        log.warning(f'push_log: {e}')
+
 # ====== RAG ======
 @lru_cache(maxsize=128)
 def rag_search(question: str, k: int = 5):
@@ -196,9 +338,77 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path
-        if path != '/chat':
-            self._send_json(404, {'error': 'not found'})
+        if path == '/chat':
+            self._handle_chat()
             return
+        if path == '/push/subscribe':
+            self._handle_push_subscribe()
+            return
+        if path == '/push/unsubscribe':
+            self._handle_push_unsubscribe()
+            return
+        if path == '/push/test':
+            self._handle_push_test()
+            return
+        self._send_json(404, {'error': 'not found'})
+
+    # ========== PUSH HANDLERS ==========
+    def _handle_push_subscribe(self):
+        length = int(self.headers.get('Content-Length', 0))
+        try:
+            payload = json.loads(self.rfile.read(length)) if length else {}
+        except Exception as e:
+            self._send_json(400, {'error': f'bad json: {e}'})
+            return
+        subscription = payload.get('subscription')
+        device_id = (payload.get('device_id') or '').strip()
+        if not subscription or not subscription.get('endpoint') or not subscription.get('keys'):
+            self._send_json(400, {'error': 'subscription inválida'})
+            return
+        if not device_id:
+            import uuid
+            device_id = str(uuid.uuid4())
+        ua = self.headers.get('User-Agent', '')
+        ok = push_save(APP_SLUG, device_id, subscription, ua, 'pt-BR')
+        if ok:
+            log.info(f'push subscribe {device_id[:8]}... ok')
+            self._send_json(200, {'ok': True, 'device_id': device_id})
+        else:
+            self._send_json(500, {'error': 'falha ao salvar subscription'})
+
+    def _handle_push_unsubscribe(self):
+        length = int(self.headers.get('Content-Length', 0))
+        try:
+            payload = json.loads(self.rfile.read(length)) if length else {}
+        except Exception:
+            payload = {}
+        endpoint = payload.get('endpoint', '')
+        if endpoint:
+            push_deactivate(endpoint)
+        self._send_json(200, {'ok': True})
+
+    def _handle_push_test(self):
+        """Admin: envia uma push de teste."""
+        import secrets as _s
+        token = self.headers.get('X-Admin-Token', '')
+        if token != KEY:
+            self._send_json(403, {'error': 'forbidden'})
+            return
+        subs = push_list_active(APP_SLUG)
+        sent = 0
+        for sub in subs:
+            ok, status, err = push_send(sub, {
+                'title': '🔔 Teste de notificação',
+                'body': 'Se você viu isso, o push tá funcionando! 🌿',
+                'url': '/',
+                'tag': 'gratidao-test',
+            })
+            push_log(APP_SLUG, sub['id'], 'Teste', 'Se você viu isso, o push tá funcionando!', '/', status, ok, err)
+            if ok:
+                sent += 1
+        self._send_json(200, {'ok': True, 'total': len(subs), 'sent': sent})
+
+    def _handle_chat(self):
         length = int(self.headers.get('Content-Length', 0))
         try:
             payload = json.loads(self.rfile.read(length)) if length else {}
