@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { DAYS } from '../domain/catalog'
-import { askProfessor } from '../domain/api'
+import { askProfessor, getDayContent } from '../domain/api'
 import { getChatForDay, saveChatMessage } from '../domain/db'
 import type { ChatMessage } from '../domain/types'
 
@@ -14,10 +14,14 @@ export default function ProfessorPage({ day, onBack }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [dayContent, setDayContent] = useState<string>('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     getChatForDay(day).then(setMessages)
+    getDayContent(day)
+      .then(c => setDayContent(c.content || ''))
+      .catch(() => setDayContent(''))
   }, [day])
 
   useEffect(() => {
@@ -33,7 +37,7 @@ export default function ProfessorPage({ day, onBack }: Props) {
     setInput('')
     setLoading(true)
     try {
-      const { answer, pages } = await askProfessor(text, day, dayInfo?.title ?? '')
+      const { answer, pages } = await askProfessor(text, day, dayInfo?.title ?? '', dayContent)
       const aiMsg: ChatMessage = { role: 'assistant', content: answer, pages, timestamp: new Date().toISOString() }
       setMessages(prev => [...prev, aiMsg])
       await saveChatMessage(day, aiMsg)
