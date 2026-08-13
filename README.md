@@ -7,6 +7,7 @@ Monorepo central de todos os apps comerciais criados por Isaías Silva.
 | Slug | Título | Categoria | URL | Repo local |
 |---|---|---|---|---|
 | `21-dias-gratidao` | 21 Dias de Gratidão | desenvolvimento-pessoal | https://preview.automacaojs.us/21-dias-gratidao/ | `apps/21-dias-gratidao/` |
+| `curar-sua-vida` | 20 Dias para Curar a Sua Vida | desenvolvimento-pessoal | https://preview.automacaojs.us/curar-sua-vida/ | `apps/curar-sua-vida/` |
 
 ## Como adicionar um novo app
 
@@ -36,7 +37,7 @@ VALUES ('<slug>', '<título>', '<slug>', ...);
 ### 4. Backend Python (porta única por app)
 
 ```bash
-GRATIDAO_PORT=8645 python3 api/<slug>_server.py   # se for outro app, porta diferente
+CURAR_VIDA_PORT=8646 python3 api/curar_vida_server.py   # exemplo
 ```
 
 ### 5. Nginx — adicionar location
@@ -57,7 +58,7 @@ location /<slug>/ {
 ### 6. Systemd service
 
 ```bash
-sudo cp infra/systemd/app-template.service /etc/systemd/system/<slug>-api.service
+sudo cp /etc/systemd/system/<slug>-api.service /etc/systemd/system/<slug>-api.service
 # editar ExecStart pra apontar pro novo backend
 sudo systemctl daemon-reload
 sudo systemctl enable --now <slug>-api.service
