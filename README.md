@@ -8,6 +8,7 @@ Monorepo central de todos os apps comerciais criados por Isaías Silva.
 |---|---|---|---|---|
 | `21-dias-gratidao` | 21 Dias de Gratidão | desenvolvimento-pessoal | https://preview.automacaojs.us/21-dias-gratidao/ | `apps/21-dias-gratidao/` |
 | `curar-sua-vida` | 20 Dias para Curar a Sua Vida | desenvolvimento-pessoal | https://preview.automacaojs.us/curar-sua-vida/ | `apps/curar-sua-vida/` |
+| `james-allen-mentalidade` | James Allen: Mentalidade | mentalidade | https://james-allen-mentalidade.ai.studio | `apps/james-allen-mentalidade/` |
 
 ## Como adicionar um novo app
 
