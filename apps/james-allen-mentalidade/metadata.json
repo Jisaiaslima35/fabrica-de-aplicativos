@@ -1,0 +1,6 @@
+{
+  "name": "James Allen: Mentalidade",
+  "description": "Jornada de 21 dias para cultivar disciplina mental e moldar a mente pelo pensamento, baseada na obra de James Allen.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
