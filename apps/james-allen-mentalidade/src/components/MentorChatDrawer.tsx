@@ -77,6 +77,18 @@ export const MentorChatDrawer: React.FC = () => {
         dayTitle: activeChatTitle,
       });
 
+      // Se a api.ts retornou answer vazio + erro, é falha do backend
+      if (!response.answer || (response as any).error) {
+        const errorMsg: ChatMessage = {
+          id: 'error-' + Date.now(),
+          sender: 'mentor',
+          text: 'Eita, travei aqui. Pode repetir de outro jeito?',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+        return;
+      }
+
       const mentorMsg: ChatMessage = {
         id: 'mentor-' + Date.now(),
         sender: 'mentor',
@@ -91,7 +103,7 @@ export const MentorChatDrawer: React.FC = () => {
       const errorMsg: ChatMessage = {
         id: 'error-' + Date.now(),
         sender: 'mentor',
-        text: 'Não foi possível conectar ao servidor no momento. Lembre-se: cultivar a mente exige paciência. Tente perguntar novamente em instantes.',
+        text: 'Eita, travei aqui. Pode repetir de outro jeito?',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);

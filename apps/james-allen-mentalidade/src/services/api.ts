@@ -52,9 +52,15 @@ export async function sendMentorQuestion(params: {
   day: number;
   dayTitle: string;
 }): Promise<ChatApiResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    console.log('[Mentor API] Sending question to backend:', {
+      url: `${API_BASE_URL}/chat`,
+      day: params.day,
+      questionLen: params.question.length,
+    });
 
     const res = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
@@ -70,19 +76,25 @@ export async function sendMentorQuestion(params: {
     });
     clearTimeout(timeoutId);
 
+    console.log('[Mentor API] HTTP status:', res.status);
+
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`);
     }
 
     const data: ChatApiResponse = await res.json();
+    console.log('[Mentor API] Got answer, length:', data.answer?.length);
     return data;
-  } catch {
-    // Elegant fallback mentor response based on James Allen philosophy
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('[Mentor API] Error:', err);
+    // Sem fallback mockado. Devolve um sinal claro para o MentorChatDrawer renderizar msg de erro.
     return {
       day: params.day,
-      answer: `Com base nos ensinamentos de James Allen para o **${params.dayTitle}** (📖 Dia ${params.day}):\n\nLembre-se de que cada pensamento que você nutre é uma causa geradora. Diante de "${params.question}", observe a sua mente sem julgamento e pergunte a si mesmo: *este pensamento constrói serenidade ou alimenta a perturbação?*\n\n**Micro-prática do dia:** Respire fundo três vezes e repita em silêncio: *"O homem é o mestre de seu destino na medida em que governa seus próprios pensamentos."*`,
-      chunks_count: 1,
-      pages: [params.day],
-    };
+      answer: '',
+      chunks_count: 0,
+      pages: [],
+      error: err instanceof Error ? err.message : String(err),
+    } as ChatApiResponse & { error?: string };
   }
 }
